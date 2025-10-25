@@ -3,3 +3,5 @@
 *.txt
 *.jpg
 *.jpeg
+__pycache__
+*.csv
