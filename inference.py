@@ -1,13 +1,10 @@
-import cv2
-import matplotlib.pyplot as plt
-from IPython.display import clear_output
-import time
+#!/usr/bin/env python3
 
+import cv2
+import time
 import sys
 import cv2
 import argparse
-import matplotlib.pyplot as plt
-from IPython.display import clear_output, display
 from jetson.utils import cudaToNumpy, cudaMemcpy, cudaFromNumpy
 from jetson_inference import poseNet
 from jetson_utils import videoSource, cudaImage, videoSource, videoOutput, Log
@@ -27,7 +24,7 @@ parser.add_argument("input", type=str, default="", nargs='?', help="URI of the i
 parser.add_argument("--output", type=str, default="", nargs='?', help="URI of the output stream")
 parser.add_argument("--network", type=str, default="resnet18-body", help="pre-trained model to load (see below for options)")
 parser.add_argument("--overlay", type=str, default="none", help="pose overlay flags (e.g. --overlay=links,keypoints)\nvalid combinations are:  'links', 'keypoints', 'boxes', 'none'")
-parser.add_argument("--threshold", type=float, default=0.6, help="minimum detection threshold to use") 
+parser.add_argument("--threshold", type=float, default=0.3, help="minimum detection threshold to use") 
 
 
 try:
@@ -38,13 +35,9 @@ except:
     sys.exit(0)
 
 net = poseNet(args.network, sys.argv, args.threshold)
-# input = videoSource("/dev/video0")
-# output = videoOutput(args.output, argv=sys.argv)
 
-
-# create video sources & outputs
+# create video source
 input = videoSource(args.input, argv=sys.argv)
-output = videoOutput(args.output, argv=sys.argv)
 
 mappings = {
     0: "Nose",
@@ -99,10 +92,7 @@ print(f"Classes: {class_names}")
 
 
 try:
-    frame_count = 0
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    last_frame_rgb = None  # store the last frame to display after interruption
-    
+    font = cv2.FONT_HERSHEY_SIMPLEX    
     while True:
         img = input.Capture()
         
@@ -110,7 +100,7 @@ try:
             print("Failed to capture frame")
             continue
         
-        # Copy to CPU for OpenCV processing
+        # copy to CPU for OpenCV processing
         raw_img = cudaImage(width=img.width, height=img.height, format=img.format)
         cudaMemcpy(raw_img, img)
         frame = cudaToNumpy(raw_img)
@@ -153,50 +143,50 @@ try:
                 eye_bbox_x2 = min(frame.shape[1], eye_max_x + eye_padding_x)
                 eye_bbox_y2 = min(frame.shape[0], eye_max_y + eye_padding_y)
                 
-                # Extract eye region for drowsiness detection
+                # extract eye region for drowsiness detection
                 eye_region = frame[eye_bbox_y1:eye_bbox_y2, eye_bbox_x1:eye_bbox_x2]
                 
-                # Perform drowsiness detection if eye region is valid
+                # perform drowsiness detection if eye region is valid
                 drowsy_label = "Unknown"
                 drowsy_prob = 0.0
                 if eye_region.shape[0] > 0 and eye_region.shape[1] > 0:
                     try:
-                        # Convert BGR to RGB for PIL
+                        # convert BGR to RGB for PIL
                         eye_region_rgb = cv2.cvtColor(eye_region, cv2.COLOR_BGR2RGB)
                         eye_pil = Image.fromarray(eye_region_rgb)
                         
-                        # Apply transforms
+                        # apply transforms
                         eye_tensor = eye_transform(eye_pil).unsqueeze(0).to(device)
                         
-                        # Convert to half precision if model is in half precision
+                        # convert to half precision if model is in half precision
                         if device.type == 'cuda':
                             eye_tensor = eye_tensor.half()
                         
-                        # Predict
+                        # predict
                         with torch.no_grad():
                             output = model(eye_tensor)
                             prob = torch.sigmoid(output).item()
-                            pred_class = int(prob > 0.5)
+                            pred_class = int(prob > 0.8)  # only classify as drowsy if probability > 0.8
                             drowsy_label = class_names[pred_class]
                             drowsy_prob = prob if pred_class == 1 else (1 - prob)
                     except Exception as e:
                         print(f"Error in drowsiness detection: {e}")
                 
-                # Set color based on drowsiness state
+                # set color based on drowsiness state
                 if drowsy_label == "DROWSY_YES":
-                    bbox_color = (0, 0, 255)  # Red for drowsy
+                    bbox_color = (0, 0, 255)  # red for drowsy
                     label_bg_color = (0, 0, 255)
                 elif drowsy_label == "DROWSY_NOT":
-                    bbox_color = (0, 255, 0)  # Green for alert
+                    bbox_color = (0, 255, 0)  # green for alert
                     label_bg_color = (0, 255, 0)
                 else:
-                    bbox_color = eye_bbox_color  # Magenta for unknown
+                    bbox_color = eye_bbox_color  # magenta for unknown
                     label_bg_color = eye_bbox_color
                 
-                # Draw bounding box with color based on drowsiness state
+                # draw bounding box with color based on drowsiness state
                 cv2.rectangle(frame, (eye_bbox_x1, eye_bbox_y1), (eye_bbox_x2, eye_bbox_y2), bbox_color, 2)
                 
-                # Prepare label with drowsiness info
+                # prepare label with drowsiness info
                 eye_label = f"{drowsy_label} ({drowsy_prob*100:.1f}%)"
                 eye_font_scale = 0.6
                 (eye_text_w, eye_text_h), _ = cv2.getTextSize(eye_label, font, eye_font_scale, 2)
@@ -204,11 +194,9 @@ try:
                 eye_label_x = eye_bbox_x1
                 eye_label_y = max(eye_bbox_y1 - 8, 15)
                 
-                # Draw label background and text
-                cv2.rectangle(frame, (eye_label_x, eye_label_y - eye_text_h - 6), 
-                             (eye_label_x + eye_text_w + 8, eye_label_y + 2), label_bg_color, -1)
-                cv2.putText(frame, eye_label, (eye_label_x + 4, eye_label_y - 2), 
-                           font, eye_font_scale, label_text_color, 2, cv2.LINE_AA)
+                # draw label background and text
+                cv2.rectangle(frame, (eye_label_x, eye_label_y - eye_text_h - 6), (eye_label_x + eye_text_w + 8, eye_label_y + 2), label_bg_color, -1)
+                cv2.putText(frame, eye_label, (eye_label_x + 4, eye_label_y - 2), font, eye_font_scale, label_text_color, 2, cv2.LINE_AA)
             
             # draw skeleton links
             try:
@@ -230,19 +218,16 @@ try:
                 cv2.circle(frame, (x, y), 6, (255, 255, 255), -1)
                 cv2.circle(frame, (x, y), 4, keypoint_color, -1)
         
-        frame_count += 1
-
-        # cv2.imshow("Drowsiness Detection with PoseNet", frame)        
-
-        # rendering the frame using jetson utils
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
-        cuda_frame = cudaFromNumpy(frame) # copying the opencv cpu frame to CUDA to render using jetson-utils's builtin function
-        output.Render(cuda_frame)
-
-        # exit on input/output EOS
-        if not input.IsStreaming() or not output.IsStreaming():
+        cv2.imshow("Drowsiness Detection with PoseNet", frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+        
+        if not input.IsStreaming():
             break
 
         
 except KeyboardInterrupt:
     print("\nPoseNet detection stopped by user")
+finally:
+    cv2.destroyAllWindows()
