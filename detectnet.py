@@ -224,3 +224,5 @@ while True:
     # exit on input/output EOS
     if not input.IsStreaming() or not output.IsStreaming():
         break
+
+	time.sleep(0.001)
