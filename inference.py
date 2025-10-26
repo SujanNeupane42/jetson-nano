@@ -5,23 +5,46 @@ import time
 
 import sys
 import cv2
+import argparse
 import matplotlib.pyplot as plt
 from IPython.display import clear_output, display
 from jetson.utils import cudaToNumpy, cudaMemcpy, cudaFromNumpy
 from jetson_inference import poseNet
-from jetson_utils import videoSource, cudaImage
-import numpy as np
-import os
-
-# Load MobileNet Fine-Tuned model for drowsiness detection
+from jetson_utils import videoSource, cudaImage, videoSource, videoOutput, Log
 import torch
 import torch.nn as nn
 from torchvision import transforms
 from torchvision.models import mobilenet_v3_small
 from PIL import Image
+from jetson_inference import detectNet
 
-net = poseNet("resnet18-body", threshold=0.15)
-input_source = videoSource("/dev/video0")
+
+parser = argparse.ArgumentParser(description="Locate objects in a live camera stream using an object detection DNN.", 
+                                 formatter_class=argparse.RawTextHelpFormatter, 
+                                 epilog=detectNet.Usage() + videoSource.Usage() + videoOutput.Usage() + Log.Usage())
+
+parser.add_argument("input", type=str, default="", nargs='?', help="URI of the input stream")
+parser.add_argument("--output", type=str, default="", nargs='?', help="URI of the output stream")
+parser.add_argument("--network", type=str, default="resnet18-body", help="pre-trained model to load (see below for options)")
+parser.add_argument("--overlay", type=str, default="none", help="pose overlay flags (e.g. --overlay=links,keypoints)\nvalid combinations are:  'links', 'keypoints', 'boxes', 'none'")
+parser.add_argument("--threshold", type=float, default=0.6, help="minimum detection threshold to use") 
+
+
+try:
+    args = parser.parse_known_args()[0]
+except:
+    print("")
+    parser.print_help()
+    sys.exit(0)
+
+net = poseNet(args.network, sys.argv, args.threshold)
+# input = videoSource("/dev/video0")
+# output = videoOutput(args.output, argv=sys.argv)
+
+
+# create video sources & outputs
+input = videoSource(args.input, argv=sys.argv)
+output = videoOutput(args.output, argv=sys.argv)
 
 mappings = {
     0: "Nose",
@@ -81,7 +104,7 @@ try:
     last_frame_rgb = None  # store the last frame to display after interruption
     
     while True:
-        img = input_source.Capture()
+        img = input.Capture()
         
         if img is None:
             print("Failed to capture frame")
@@ -209,19 +232,17 @@ try:
         
         frame_count += 1
 
-        cv2.imshow("Drowsiness Detection with PoseNet", frame)        
-        
-        # # Convert to RGB for matplotlib
-        # frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        # last_frame_rgb = frame_rgb  
-        
-        # clear_output(wait=True)
-        # plt.figure(figsize=(12, 8))
-        # plt.imshow(frame_rgb)
-        # plt.axis('off')
-        # plt.title(f'PoseNet + Drowsiness Detection - Frame {frame_count}')
-        # plt.tight_layout()
-        # plt.show()
+        # cv2.imshow("Drowsiness Detection with PoseNet", frame)        
+
+        # rendering the frame using jetson utils
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+        cuda_frame = cudaFromNumpy(frame) # copying the opencv cpu frame to CUDA to render using jetson-utils's builtin function
+        output.Render(cuda_frame)
+
+        # exit on input/output EOS
+        if not input.IsStreaming() or not output.IsStreaming():
+            break
+
         
 except KeyboardInterrupt:
     print("\nPoseNet detection stopped by user")
