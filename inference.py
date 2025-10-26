@@ -75,7 +75,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = mobilenet_v3_small(weights=False)
 model.classifier[3] = nn.Linear(model.classifier[3].in_features, 1)
 model.load_state_dict(torch.load("Models/MobileNet_224_FineTuned.pth"))
-model = model.to(device)
+model.to(device)
 
 # Convert model to half precision (FP16) for faster inference
 if device.type == 'cuda':
