@@ -20,7 +20,7 @@ parser.add_argument("--output", type=str, default="", nargs='?', help="URI of th
 parser.add_argument("--network", type=str, default="resnet18-body", help="pre-trained model to load (see below for options)")
 parser.add_argument("--overlay", type=str, default="none", help="pose overlay flags (e.g. --overlay=links,keypoints)\nvalid combinations are:  'links', 'keypoints', 'boxes', 'none'")
 parser.add_argument("--threshold", type=float, default=0.3, help="minimum detection threshold to use")
-parser.add_argument("--distance-threshold", type=int, default=600, help="minimum pixel distance for social distancing (default: 25 pixels)")
+parser.add_argument("--distance-threshold", type=int, default=150, help="minimum pixel distance for social distancing (default: 25 pixels)")
 
 
 try:
@@ -248,28 +248,55 @@ try:
             cv2.rectangle(frame, (mid_x - text_w // 2 - 5, mid_y - text_h - 5), (mid_x + text_w // 2 + 5, mid_y + 5), violation_color, 2)
             cv2.putText(frame, distance_label, (mid_x - text_w // 2, mid_y - 5), font, font_scale, (255, 255, 255), 2, cv2.LINE_AA)
         
-        # this is our violation statistics panel
+        # Draw compact stats box in top-left corner
         num_people = len(poses)
         num_violations = len(violations)
         total_violations += num_violations
         
-        panel_height = 120
-        panel = np.zeros((panel_height, frame.shape[1], 3), dtype=np.uint8)
-        panel[:] = (40, 40, 40)  # dark gray background for the panel
+        # Stats box parameters
+        box_x = 10
+        box_y = 10
+        box_padding = 10
+        line_height = 25
+        font_scale_stats = 0.5
         
-        y_offset = 30
-        cv2.putText(panel, f"People Detected: {num_people}", (20, y_offset), font, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+        # Prepare stats text
+        stats_lines = [
+            f"People: {num_people}",
+            f"Violations: {num_violations}",
+            f"Threshold: {DISTANCE_THRESHOLD}px"
+        ]
         
-        y_offset += 35
+        # Calculate box dimensions
+        max_text_width = 0
+        for line in stats_lines:
+            (text_w, text_h), _ = cv2.getTextSize(line, font, font_scale_stats, 1)
+            max_text_width = max(max_text_width, text_w)
+        
+        box_width = max_text_width + 2 * box_padding
+        box_height = len(stats_lines) * line_height + box_padding
+        
+        # Draw semi-transparent background
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (box_x, box_y), (box_x + box_width, box_y + box_height), (40, 40, 40), -1)
+        cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
+        
+        # Draw border
+        cv2.rectangle(frame, (box_x, box_y), (box_x + box_width, box_y + box_height), (100, 100, 100), 2)
+        
+        # Draw stats text
+        text_y = box_y + box_padding + 15
+        cv2.putText(frame, stats_lines[0], (box_x + box_padding, text_y), font, font_scale_stats, (255, 255, 255), 1, cv2.LINE_AA)
+        
+        text_y += line_height
         violation_color_text = violation_color if num_violations > 0 else safe_color
-        cv2.putText(panel, f"Active Violations: {num_violations}", (20, y_offset), font, 0.7, violation_color_text, 2, cv2.LINE_AA)
+        cv2.putText(frame, stats_lines[1], (box_x + box_padding, text_y), font, font_scale_stats, violation_color_text, 1, cv2.LINE_AA)
         
-        y_offset += 35
-        cv2.putText(panel, f"Distance Threshold: {DISTANCE_THRESHOLD}px", (20, y_offset), font, 0.6, (200, 200, 200), 1, cv2.LINE_AA)
+        text_y += line_height
+        cv2.putText(frame, stats_lines[2], (box_x + box_padding, text_y), font, font_scale_stats, (200, 200, 200), 1, cv2.LINE_AA)
         
-        # putting the stats panel and frame together
-        combined_frame = np.vstack([panel, frame])
-        cv2.imshow("Social Distancing Detection - PoseNet", combined_frame)
+        # Display the frame
+        cv2.imshow("Social Distancing Detection - PoseNet", frame)
         
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
