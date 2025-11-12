@@ -203,7 +203,7 @@ try:
                         in_violation_state = True
                         total_violations += 1
                         last_violation_time = datetime.now()
-                        print(f"\n⚠️ DROWSINESS VIOLATION DETECTED! (Violation #{total_violations})")
+                        print(f"\nDROWSINESS VIOLATION DETECTED! (Violation #{total_violations})")
                         print(f"Time: {last_violation_time.strftime('%Y-%m-%d %H:%M:%S')}")
                         print(f"Duration: {drowsy_duration:.1f} seconds")
                         
@@ -214,7 +214,7 @@ try:
                     # one detection is stopped, reseting the drowsy tracking variables
                     if drowsy_start_time is not None:
                         if in_violation_state:
-                            print(f"   Violation ended. Total duration: {drowsy_duration:.1f} seconds")
+                            print(f"Violation ended. Total duration: {drowsy_duration:.1f} seconds")
                         drowsy_start_time = None
                         drowsy_duration = 0.0
                         in_violation_state = False
@@ -264,7 +264,7 @@ try:
                 cv2.rectangle(overlay, (0, 0), (frame.shape[1], frame.shape[0]), (0, 0, 255), -1)
                 cv2.addWeighted(overlay, 0.15, frame, 0.85, 0, frame)
             
-            alarm_text = "⚠️ DROWSINESS ALERT! ⚠️"
+            alarm_text = "DROWSINESS ALERT!"
             alarm_font_scale = 1.2
             alarm_thickness = 3
             (alarm_w, alarm_h), _ = cv2.getTextSize(alarm_text, font, alarm_font_scale, alarm_thickness)
