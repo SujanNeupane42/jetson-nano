@@ -14,6 +14,7 @@ from torchvision import transforms
 from torchvision.models import mobilenet_v3_small
 from PIL import Image
 from jetson_inference import detectNet
+from datetime import datetime
 
 
 parser = argparse.ArgumentParser(description="Locate objects in a live camera stream using an object detection DNN.", 
@@ -90,6 +91,19 @@ print("MobileNet Drowsiness Detection Model loaded successfully!")
 print(f"Device: {device}")
 print(f"Classes: {class_names}")
 
+# number of seconds person must be drowsy to trigger violation
+DROWSY_THRESHOLD_SECONDS = 3  
+drowsy_start_time = None 
+drowsy_duration = 0.0  # 
+
+# drowsiness violation statistics
+total_violations = 0
+last_violation_time = None
+in_violation_state = False
+
+print(f"\nDrowsiness Monitoring Settings:")
+print(f"- Violation Threshold: {DROWSY_THRESHOLD_SECONDS} seconds")
+print(f"- Drowsiness threshold probability: 0.8")
 
 try:
     font = cv2.FONT_HERSHEY_SIMPLEX    
@@ -176,11 +190,36 @@ try:
                 if drowsy_label == "DROWSY_YES":
                     bbox_color = (0, 0, 255)  # red for drowsy
                     label_bg_color = (0, 0, 255)
+                    
+                    # start time tracking if drowsiness is detected
+                    if drowsy_start_time is None:
+                        drowsy_start_time = time.time()
+                    
+                    # this calculates the number of seconds its been since the person started being drowsy
+                    drowsy_duration = time.time() - drowsy_start_time
+                    
+                    # if threshold is exceeded, we give drowsines violation alarm
+                    if drowsy_duration >= DROWSY_THRESHOLD_SECONDS and not in_violation_state:
+                        in_violation_state = True
+                        total_violations += 1
+                        last_violation_time = datetime.now()
+                        print(f"\n⚠️ DROWSINESS VIOLATION DETECTED! (Violation #{total_violations})")
+                        print(f"Time: {last_violation_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                        print(f"Duration: {drowsy_duration:.1f} seconds")
+                        
                 elif drowsy_label == "DROWSY_NOT":
-                    bbox_color = (0, 255, 0)  # green for alert
+                    bbox_color = (0, 255, 0) 
                     label_bg_color = (0, 255, 0)
+                    
+                    # one detection is stopped, reseting the drowsy tracking variables
+                    if drowsy_start_time is not None:
+                        if in_violation_state:
+                            print(f"   Violation ended. Total duration: {drowsy_duration:.1f} seconds")
+                        drowsy_start_time = None
+                        drowsy_duration = 0.0
+                        in_violation_state = False
                 else:
-                    bbox_color = eye_bbox_color  # magenta for unknown
+                    bbox_color = eye_bbox_color  
                     label_bg_color = eye_bbox_color
                 
                 # draw bounding box with color based on drowsiness state
@@ -217,6 +256,79 @@ try:
             for kp_id, (x, y) in keypoint_dict.items():
                 cv2.circle(frame, (x, y), 6, (255, 255, 255), -1)
                 cv2.circle(frame, (x, y), 4, keypoint_color, -1)
+        
+        # drawing an alarm overlay if in drowsiness violation state
+        if in_violation_state:
+            if int(time.time() * 2) % 2 == 0:  # Flash every 0.5 seconds
+                overlay = frame.copy()
+                cv2.rectangle(overlay, (0, 0), (frame.shape[1], frame.shape[0]), (0, 0, 255), -1)
+                cv2.addWeighted(overlay, 0.15, frame, 0.85, 0, frame)
+            
+            alarm_text = "⚠️ DROWSINESS ALERT! ⚠️"
+            alarm_font_scale = 1.2
+            alarm_thickness = 3
+            (alarm_w, alarm_h), _ = cv2.getTextSize(alarm_text, font, alarm_font_scale, alarm_thickness)
+            alarm_x = (frame.shape[1] - alarm_w) // 2
+            alarm_y = 60
+            
+            cv2.rectangle(frame, (alarm_x - 10, alarm_y - alarm_h - 10), (alarm_x + alarm_w + 10, alarm_y + 10), (0, 0, 0), -1)
+            cv2.putText(frame, alarm_text, (alarm_x, alarm_y), font, alarm_font_scale, (0, 0, 255), alarm_thickness, cv2.LINE_AA)
+        
+        # violation statistics panel
+        panel_x = 10
+        panel_y = 30
+        panel_padding = 10
+        line_height = 30
+        panel_font_scale = 0.6
+        panel_thickness = 2
+        
+        stats_lines = []
+        stats_lines.append(f"Total Violations: {total_violations}")
+        stats_lines.append(f"Drowsy Duration: {drowsy_duration:.1f}s / {DROWSY_THRESHOLD_SECONDS}s")
+        
+        if in_violation_state:
+            status_text = "Status: VIOLATION"
+            status_color = (0, 0, 255)
+        elif drowsy_start_time is not None:
+            status_text = "Status: DROWSY"
+            status_color = (255, 165, 0)
+        else:
+            status_text = "Status: ALERT"
+            status_color = (0, 255, 0)
+        stats_lines.append(status_text)
+        
+        # calculating the number of seconds its been since last violation was detected
+        if last_violation_time:
+            time_since_violation = (datetime.now() - last_violation_time).total_seconds()
+            if time_since_violation < 60:
+                stats_lines.append(f"Last Violation: {time_since_violation:.0f}s ago")
+            elif time_since_violation < 3600:
+                stats_lines.append(f"Last Violation: {time_since_violation/60:.1f}m ago")
+            else:
+                stats_lines.append(f"Last Violation: {last_violation_time.strftime('%H:%M:%S')}")
+        else:
+            stats_lines.append("Last Violation: None")
+        
+        max_text_width = 0
+        for line in stats_lines:
+            (text_w, text_h), _ = cv2.getTextSize(line, font, panel_font_scale, panel_thickness)
+            max_text_width = max(max_text_width, text_w)
+        
+        panel_width = max_text_width + 2 * panel_padding
+        panel_height = len(stats_lines) * line_height + 2 * panel_padding
+        
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (panel_x, panel_y - 20), 
+                     (panel_x + panel_width, panel_y + panel_height - 20), 
+                     (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
+        
+        for i, line in enumerate(stats_lines):
+            y_pos = panel_y + i * line_height
+            if "Status:" in line:
+                cv2.putText(frame, line, (panel_x + panel_padding, y_pos), font, panel_font_scale, status_color, panel_thickness, cv2.LINE_AA)
+            else:
+                cv2.putText(frame, line, (panel_x + panel_padding, y_pos), font, panel_font_scale, (255, 255, 255), panel_thickness, cv2.LINE_AA)
         
         cv2.imshow("Drowsiness Detection with PoseNet", frame)
         
