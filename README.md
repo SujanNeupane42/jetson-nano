@@ -39,8 +39,7 @@ If the drowsiness is detected for more than N seconds, we get this:
 ## Project Structure
 
 ```
-├── inference.py                    # Main detection script
-├── posenet_pipeline.py             # PoseNet pipeline utilities
+├── inference.py                    # Main pipeline utilities
 ├── Models/
 │   ├── MobileNet_224_FineTuned.pth
 │   └── MobileNet_224_Scratch.pth
@@ -49,9 +48,6 @@ If the drowsiness is detected for more than N seconds, we get this:
 │   ├── prepare_training_data.ipynb
 │   ├── training_mobilenet_FineTuned.ipynb
 │   └── training_mobilenet_Scratch.ipynb
-└── TRAINING_DATA/
-    ├── DROWSY/
-    └── NOT_DROWSY/
 ```
 
 ## Quick Start
