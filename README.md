@@ -47,7 +47,7 @@ Leverages PoseNet to track body keypoints (specifically hip positions) and calcu
 
 ---
 
-### 😴 **PoseNet_rule_based**
+### 📐 **PoseNet_rule_based**
 *Rule-based drowsiness detection using facial keypoints*
 
 Early implementation of drowsiness detection using geometric rules derived from facial keypoints. Uses ratios of ear-to-shoulder distances and head width to detect head tilts and nodding.
@@ -62,7 +62,7 @@ Early implementation of drowsiness detection using geometric rules derived from 
 
 ---
 
-### 🚗 **PoseNet_MobileNetv3-mini** *(Recommended)*
+### 🧠 **PoseNet_MobileNetv3-mini** *(Recommended)*
 *Advanced drowsiness detection with deep learning*
 
 The most sophisticated implementation combining PoseNet for face tracking with a fine-tuned MobileNetV3 classifier trained specifically on drowsy vs. alert eye states.
