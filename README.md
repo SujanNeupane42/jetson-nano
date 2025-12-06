@@ -4,7 +4,13 @@ Real-time driver drowsiness monitoring using PoseNet for face tracking and Mobil
 
 ## How It Works
 
-The system tracks a person's face using PoseNet to locate eye regions, then runs those regions through a trained MobileNetV3 model to detect drowsiness. If drowsiness is detected for more than 3 consecutive seconds, a violation is triggered with visual alerts.
+The system tracks a person's face using PoseNet to locate eye regions.
+If both (left and right) eyes are detected, we pad the image to get a bounding box that contains both eyes. We then pas this new image of size 3 * 224 * 224 (padded with zero pixels for the finetuned model) and pass it to MobileNetMini-v3 to get binary predictions on whether the case is drowsy or not. 
+
+The MobileNet-v3 model pretrained on imagenet (which has 1000 classes) is used with its final layer replaced with a linear layer with 3 neurons which just outputs two logits, passed through softmax to get predicted probabilities of both classes. This model's earlier layers are frozen (weights aren't changed during training) and only the final layer is updated (extracting embeddings + performing classificaiton on those embeddings).
+
+
+If drowsiness is detected for more than N consecutive seconds, a violation is triggered with visual alerts. A sound alarm can be added by deploying this system on a vehicle to prevent driver from falling asleep.
 
 ## Project Structure
 
