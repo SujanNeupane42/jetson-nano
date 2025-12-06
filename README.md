@@ -1,39 +1,40 @@
 # Drowsiness Detection System
 
-Real-time driver drowsiness monitoring using PoseNet for face tracking and MobileNetV3 for eye state classification on Jetson Nano.
+A real-time driver monitoring system that detects drowsiness using PoseNet for face tracking and MobileNetV3 for classification, optimized to run on Jetson Nano.
 
 ## How It Works
 
-The system tracks a person's face using PoseNet to locate eye regions.
-If both (left and right) eyes are detected, we pad the image to get a bounding box that contains both eyes. We then pas this new image of size 3 * 224 * 224 (padded with zero pixels for the finetuned model) and pass it to MobileNetMini-v3 to get binary predictions on whether the case is drowsy or not. 
+The system uses PoseNet to track facial keypoints and locate eye regions in real-time. When both eyes are detected, it extracts a bounding box around them and passes the cropped image (224x224 pixels with zero padding) to a MobileNetV3-mini classifier trained to distinguish between drowsy and alert states.
 
-The MobileNet-v3 model pretrained on imagenet (which has 1000 classes) is used with its final layer replaced with a linear layer with 3 neurons which just outputs two logits, passed through softmax to get predicted probabilities of both classes. This model's earlier layers are frozen (weights aren't changed during training) and only the final layer is updated (extracting embeddings + performing classificaiton on those embeddings).
+I used a transfer learning approach with a pretrained MobileNet-v3 model. The original ImageNet classifier was replaced with a 2-class output layer, and I froze the earlier convolutional layers to use them as a feature extractor. Only the final classification layer was trained on the drowsiness dataset, which helped get decent results without needing massive amounts of training data.
 
-For instance, model was trained on images like this
+Here are some examples from the training set:
 
-### NON-DROWSY Training Sample Image
-![Non-Drowsy traininig sample image](Images/non-drowsy_training_image_sample.jpg)
+### Training Data Examples
 
-### DROWSY Training Sample Image
-![Drowsy traininig sample image](Images/drowsy_training_image_sample.jpg)
+**Non-Drowsy Sample**  
+![Non-Drowsy training sample](Images/non-drowsy_training_image_sample.jpg)
 
-Both categories of images are not up to 224 pixels (width and height), which is the necessary input size for the first layer of MobileNet-v3 mini model. So, zero padding was applied to the images.
+**Drowsy Sample**  
+![Drowsy training sample](Images/drowsy_training_image_sample.jpg)
 
+Since the eye region images weren't always 224x224, I applied zero padding to standardize the input size for the model.
 
-If drowsiness is detected for more than N consecutive seconds, a violation is triggered with visual alerts. A sound alarm can be added by deploying this system on a vehicle to prevent driver from falling asleep.
+### Detection Output
 
-When model detects a person to be not drowsy, we get predictions like this:
+Once the system is running, it provides real-time predictions. If someone is alert and attentive, you'll see something like this:
 
-### NO-DROWSY Inference Sample
-![Drowsy Inference Sample](Images/no_drowsy.jpg)
+![No drowsiness detected](Images/no_drowsy.jpg)
 
-### DROWSY Inference Sample
-![Drowsy Inference Sample](Images/base_drowsy.jpg)
+When drowsiness is first detected:
 
-If the drowsiness is detected for more than N seconds, we get this:
+![Drowsiness detected](Images/base_drowsy.jpg)
 
-### ALERT-DROWSY Inference Sample
-![ALERT-Drowsy Inference Sample](Images/alert_Drowsy.jpg)
+And if drowsiness persists for more than a few seconds, the system triggers an alert:
+
+![Alert triggered](Images/alert_Drowsy.jpg)
+
+The violation threshold is configurable—right now it's set to trigger after sustained drowsiness for N seconds. In a real deployment, this could easily be connected to an audio alarm to wake up the driver.
 
 
 ## Project Structure
@@ -50,23 +51,25 @@ If the drowsiness is detected for more than N seconds, we get this:
 │   └── training_mobilenet_Scratch.ipynb
 ```
 
-## Quick Start
+## Getting Started
 
-Run detection on default camera:
+Clone the repo and run the inference script with your camera source:
+
+**USB Camera:**
 ```bash
 python3 inference.py /dev/video0
 ```
 
-Run on CSI camera:
+**CSI Camera:**
 ```bash
 python3 inference.py csi://0
 ```
 
-Press `q` to quit.
+Press `q` to exit the application.
 
-## Requirements
+## Dependencies
 
-- Jetson Nano with JetPack 4.6+
+- Jetson Nano (JetPack 4.6 or later)
 - PyTorch
 - jetson-inference
 - jetson-utils
@@ -74,36 +77,37 @@ Press `q` to quit.
 - torchvision
 - PIL
 
-## Model Training
+## Training Process
 
-Training notebooks are in the `Notebooks/` directory:
+If you want to retrain the models or experiment with different architectures, check out the notebooks in `Notebooks/`:
 
-1. `prepare_images.ipynb` - Image collection and preprocessing
-2. `prepare_training_data.ipynb` - Dataset preparation
-3. `training_mobilenet_FineTuned.ipynb` - Transfer learning approach
-4. `training_mobilenet_Scratch.ipynb` - Training from scratch
+1. **prepare_images.ipynb** – Collect and preprocess images
+2. **prepare_training_data.ipynb** – Organize the dataset
+3. **training_mobilenet_FineTuned.ipynb** – Fine-tune pretrained MobileNet (recommended)
+4. **training_mobilenet_Scratch.ipynb** – Train from scratch
 
-The fine-tuned model is used by default in `inference.py`.
+The fine-tuned model (`MobileNet_224_FineTuned.pth`) is what gets loaded by default in the inference script since it performed better with limited training data.
 
-## Detection Features
+## Features
 
-- Real-time pose estimation with keypoint visualization
-- Eye region detection and bounding boxes
-- Binary classification (DROWSY_YES / DROWSY_NOT)
-- N-second violation threshold
-- Visual alerts with flashing overlay
-- Statistics panel showing:
-  - Total violations
+- Real-time pose estimation with facial keypoint tracking
+- Automatic eye region detection and bounding box extraction
+- Binary classification (drowsy vs. alert)
+- Configurable violation threshold based on sustained drowsiness
+- Visual alerts with screen overlay when drowsiness persists
+- Live statistics display:
+  - Total violation count
   - Current drowsy duration
   - Alert status
   - Time since last violation
 
-## Thresholds
+## Configuration
 
-- Drowsiness probability: 0.8 (80%)
-- Violation trigger: N seconds continuous drowsiness
-- Model input: 224x224 RGB images
+**Key Parameters:**
+- Drowsiness confidence threshold: 0.8 (80%)
+- Violation trigger duration: N seconds of continuous drowsiness
+- Input image size: 224x224 RGB
 
-## Notes
+## Technical Notes
 
-The model runs in FP16 (half precision) on GPU for faster inference. Eye regions are extracted with padding to ensure both eyes are captured within the bounding box.
+The model runs in FP16 (half precision) mode on the GPU to maximize inference speed on the Jetson Nano. Eye regions are extracted with padding applied to ensure both eyes fit cleanly within the bounding box before classification.
