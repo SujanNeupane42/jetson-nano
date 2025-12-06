@@ -16,7 +16,7 @@ All implementations use:
 
 ## 📂 Branch Structure
 
-### 🚨 **DetectNet / object_detection**
+### 🚨 **DetectNet**
 *Person detection with anomaly logging*
 
 Uses SSD-MobileNet-v2 to detect people in frame and triggers anomalies when someone stays in view for more than 5 seconds. Great for monitoring restricted areas or tracking dwell times.
