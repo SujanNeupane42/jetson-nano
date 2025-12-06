@@ -92,9 +92,9 @@ print(f"Device: {device}")
 print(f"Classes: {class_names}")
 
 # number of seconds person must be drowsy to trigger violation
-DROWSY_THRESHOLD_SECONDS = 3  
+DROWSY_THRESHOLD_SECONDS = 1
 drowsy_start_time = None 
-drowsy_duration = 0.0  # 
+drowsy_duration = 0.0  
 
 # drowsiness violation statistics
 total_violations = 0
@@ -115,6 +115,9 @@ try:
             continue
         
         # copy to CPU for OpenCV processing
+        # looks like the jetson-inference package automatically makes changes to the original image feed in gpu like -
+        # - adding keypoints and their connections. I want to manually make change to the frame in the video feed. Hence,
+        # - making copy of the frame in GPU (by converting it to NumPy and to OpenCV format), I get to do any custom manipulaton I want in original frame
         raw_img = cudaImage(width=img.width, height=img.height, format=img.format)
         cudaMemcpy(raw_img, img)
         frame = cudaToNumpy(raw_img)
@@ -122,6 +125,7 @@ try:
         
         poses = net.Process(img, overlay='none')
         
+        # each detected pose is from a new person; hence, can also be used to do person/face detection
         for obj_idx, pose in enumerate(poses):
             keypoint_dict = {}
             
